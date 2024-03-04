@@ -1426,6 +1426,9 @@ struct redisMemOverhead {
     float rss_extra;
     size_t rss_extra_bytes;
     size_t num_dbs;
+    size_t overhead_db_hashtable_lut;
+    size_t overhead_db_hashtable_rehashing;
+    unsigned long db_dict_rehashing_count;
     struct {
         size_t dbid;
         size_t overhead_ht_main;
@@ -3187,6 +3190,8 @@ int serverPubsubShardSubscriptionCount(void);
 size_t pubsubMemOverhead(client *c);
 void unmarkClientAsPubSub(client *c);
 int pubsubTotalSubscriptions(void);
+dict *getClientPubSubChannels(client *c);
+dict *getClientPubSubShardChannels(client *c);
 
 /* Keyspace events notification */
 void notifyKeyspaceEvent(int type, char *event, robj *key, int dbid);
@@ -3388,7 +3393,8 @@ void ldbKillForkedSessions(void);
 int ldbPendingChildren(void);
 sds luaCreateFunction(client *c, robj *body);
 void luaLdbLineHook(lua_State *lua, lua_Debug *ar);
-void freeLuaScriptsAsync(dict *lua_scripts);
+void freeLuaScriptsSync(dict *lua_scripts, lua_State *lua);
+void freeLuaScriptsAsync(dict *lua_scripts, lua_State *lua);
 void freeFunctionsAsync(functionsLibCtx *lib_ctx);
 int ldbIsEnabled(void);
 void ldbLog(sds entry);
