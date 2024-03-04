@@ -7175,6 +7175,17 @@ int main(int argc, char **argv) {
         serverLog(LL_WARNING,"WARNING: You specified a maxmemory value that is less than 1MB (current value is %llu bytes). Are you sure this is what you really want?", server.maxmemory);
     }
 
+    /* Connect to the backend database */
+    if (USE_REMOTE_BACKEND) {
+        server.backend_db = connect_to_backend();
+        if (server.backend_db == NULL) {
+            serverLog(LL_WARNING,"Failed to connect to backend DB\n");
+            exit(1);
+        } else {
+            serverLog(LL_NOTICE,"Connected to backend DB\n");
+        }
+    }
+
     redisSetCpuAffinity(server.server_cpulist);
     setOOMScoreAdj(-1);
 

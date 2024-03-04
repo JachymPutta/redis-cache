@@ -682,6 +682,15 @@ int performEvictions(void) {
         if (bestkey) {
             db = server.db+bestdbid;
             robj *keyobj = createStringObject(bestkey,sdslen(bestkey));
+
+            if (USE_REMOTE_BACKEND && bwAvailable(db)) {
+                dictEntry *de = dbFind(db, keyobj->ptr);
+                robj *val = dictGetVal(de);
+                printf("performEvictions: Setting : %s %s\n", keyobj->ptr, val->ptr);
+                redisReply *reply = redisCommand(server.backend_db,"SET %s %s", keyobj->ptr, val->ptr); //TODO: key->ptr might not be a string at all
+                printf("performEvictions: Response from remote: %s\n", reply->str);
+                freeReplyObject(reply);
+            }
             /* We compute the amount of memory freed by db*Delete() alone.
              * It is possible that actually the memory needed to propagate
              * the DEL in AOF and replication link is greater than the one

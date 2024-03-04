@@ -108,6 +108,16 @@ robj *lookupKey(redisDb *db, robj *key, int flags) {
             /* The key is no longer valid. */
             val = NULL;
         }
+    } else if (USE_REMOTE_BACKEND && bwAvailable(db)) {
+        redisReply *reply = redisCommand(server.backend_db,"GET %s", key->ptr); //TODO: key->ptr might not be a string at all
+        printf("lookupKey: Response from remote: %s\n", reply->str);
+        if (reply->len) {
+            val = createStringObject(reply->str, reply->len);
+            dbAdd(db, key, val);
+            freeReplyObject(reply);
+            return lookupKey(db, key, flags);
+        }
+        freeReplyObject(reply);
     }
 
     if (val) {
