@@ -6,11 +6,10 @@
 
 
 redisContext *connect_to_backend(void) {
-  char REMOTE_BACKEND_IP[] = "127.0.0.1";
   int REMOTE_BACKEND_PORT = 6379;
   redisContext *c;
 
-  c = redisConnect(REMOTE_BACKEND_IP, REMOTE_BACKEND_PORT);
+  c = redisConnect(server.remote_backend_ip, REMOTE_BACKEND_PORT);
   if (c->err) {
       // printf("error: %s\n", c->errstr);
       return NULL;
@@ -20,34 +19,36 @@ redisContext *connect_to_backend(void) {
 }
 
 int bwAvailable(redisDb *db) {
-  robj *key= createStringObject(RATE_LIMIT_KEY, strlen(RATE_LIMIT_KEY));
+  robj *key= createStringObject(server.rate_limit_key, strlen(server.rate_limit_key));
   dictEntry *de = dbFind(db, key->ptr);
   char req_left_str[12];
 
   robj *val = NULL;
 
   if (de) {
-    printf("Rate_limit exists\n");
+    // printf("Rate_limit exists\n");
     val = dictGetVal(de);
     int reqs_left = atoi(val->ptr);
-    printf("Value before decrement: %d\n", reqs_left);
+    // printf("Value before decrement: %d\n", reqs_left);
     if (reqs_left > 0) {
       reqs_left--;
-      printf("Value after decrement: %d\n", reqs_left);
+      // printf("Value after decrement: %d\n", reqs_left);
       sprintf(req_left_str, "%d", reqs_left);
       robj *new_val = createStringObject(req_left_str, strlen(req_left_str));
       dbReplaceValue(db, key, new_val);
-    } else {
+      return 1;
+    } 
+    else {
       printf("Rate limit exceeded\n");
-      return 0;
     }
-  } else {
-    printf("Rate-limit not found\n");
-    val = createStringObject(RATE_LIMIT, strlen(RATE_LIMIT));
-    // robj *dummy_val= createStringObject("10", strlen("10"));
-    setKey(NULL, db, key, val, SETKEY_DOESNT_EXIST);
-    setExpire(NULL, db, key, mstime() + RATE_LIMIT_PERIOD_MS);
-  }
+  } 
+  // else {
+  //   printf("Rate-limit not found\n");
+  //   val = createStringObject(RATE_LIMIT, strlen(RATE_LIMIT));
+  //   // robj *dummy_val= createStringObject("10", strlen("10"));
+  //   setKey(NULL, db, key, val, SETKEY_DOESNT_EXIST);
+  //   setExpire(NULL, db, key, mstime() + RATE_LIMIT_PERIOD_MS);
+  // }
 
-  return 1;
+  return 0;
 }

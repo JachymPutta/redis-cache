@@ -7176,6 +7176,10 @@ int main(int argc, char **argv) {
         serverLog(LL_WARNING,"WARNING: You specified a maxmemory value that is less than 1MB (current value is %llu bytes). Are you sure this is what you really want?", server.maxmemory);
     }
 
+    /* Rate limiting and backend storage setup */
+    serverLog(LL_NOTICE, "rate_limit_key = %s\n", server.rate_limit_key);
+    serverLog(LL_NOTICE, "remote_backend_ip = %s, ASSUMING PORT 6379!!!\n", server.remote_backend_ip);
+
     /* Connect to the backend database */
     if (USE_REMOTE_BACKEND) {
         server.backend_db = connect_to_backend();

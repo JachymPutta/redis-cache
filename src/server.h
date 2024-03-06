@@ -2076,6 +2076,8 @@ struct redisServer {
     char *locale_collate;
 
     redisContext *backend_db;
+    char *rate_limit_key;
+    char *remote_backend_ip;
 };
 
 #define MAX_KEYS_BUFFER 256
