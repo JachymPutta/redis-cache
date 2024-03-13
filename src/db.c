@@ -116,14 +116,46 @@ robj *lookupKey(redisDb *db, robj *key, int flags) {
             val = NULL;
         }
     } else if (USE_REMOTE_BACKEND && bwAvailable(db)) {
-        redisReply *reply = redisCommand(server.backend_db,"GET %s", key->ptr); //TODO: key->ptr might not be a string at all
-        printf("lookupKey: Response from remote: %s\n", reply->str);
-        if (reply->len) {
+        redisReply *reply = redisCommand(server.backend_db,"HGETALL %s", key->ptr); //TODO: key->ptr might not be a string at all
+        // printf("response type: %d\n", reply->type);
+        // printf("lookupKey: Response from remote for key %s:  %s\n", key->ptr, reply->str);
+
+        // check the type of reply
+        if (reply->type == REDIS_REPLY_STRING) {
+            // printf("lookupKey: String response from remote for key %s:  %s\n", key->ptr, reply->str);
             val = createStringObject(reply->str, reply->len);
             dbAdd(db, key, val);
             freeReplyObject(reply);
             return lookupKey(db, key, flags);
         }
+
+        if (reply->type == REDIS_REPLY_INTEGER || reply->type == REDIS_REPLY_DOUBLE) {
+            // printf("lookupKey: Integer response from remote for key %s:  %lld\n", key->ptr, reply->integer);
+            val = createStringObjectFromLongLong(reply->integer);
+            dbAdd(db, key, val);
+            freeReplyObject(reply);
+            return lookupKey(db, key, flags);
+        }
+
+        if (reply->type == REDIS_REPLY_ARRAY) {
+            // printf("lookupKey: Array response from remote for key %s:  %d\n", key->ptr, reply->elements);
+
+            val = createHashObject();
+
+            for (size_t i = 0; i < reply->elements; i += 2) {
+                sds field = sdsnewlen(reply->element[i]->str, reply->element[i]->len);
+                sds value = sdsnewlen(reply->element[i+1]->str, reply->element[i+1]->len);
+
+                // printf("adding field: %s, value: %s\n", field->ptr, value->ptr);
+                hashTypeSet(val, field, value, HASH_SET_COPY);
+            }
+
+            dbAdd(db, key, val);
+            freeReplyObject(reply);
+            return lookupKey(db, key, flags);
+        }
+
+        // printf("lookupKey: Error in response from remote for key %s:  %s\n", key->ptr, reply->str);
         freeReplyObject(reply);
     }
 
