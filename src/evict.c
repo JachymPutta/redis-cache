@@ -686,10 +686,34 @@ int performEvictions(void) {
             if (USE_REMOTE_BACKEND && bwAvailable(db)) {
                 dictEntry *de = dbFind(db, keyobj->ptr);
                 robj *val = dictGetVal(de);
-                printf("performEvictions: Setting : %s %s\n", keyobj->ptr, val->ptr);
-                redisReply *reply = redisCommand(server.backend_db,"SET %s %s", keyobj->ptr, val->ptr); //TODO: key->ptr might not be a string at all
-                printf("performEvictions: Response from remote: %s\n", reply->str);
-                freeReplyObject(reply);
+                if (val->type == OBJ_STRING) {
+                    long long default_val = 0;
+                    long long *ll_val = &default_val;
+                    if (isObjectRepresentableAsLongLong(val, ll_val) == C_OK) {
+                        // printf("SET %s %lld\n", key->ptr, *ll_val);
+                        redisReply *reply = redisCommand(server.backend_db,"SET %s %lld", keyobj->ptr, *ll_val);
+                        freeReplyObject(reply);
+                    } else {
+                        // printf("SET %s %s\n", key->ptr, val->ptr);
+                        redisReply *reply = redisCommand(server.backend_db,"SET %s %s", keyobj->ptr, val->ptr);
+                        freeReplyObject(reply);
+                    }
+                } else if (val->type == OBJ_HASH) {
+
+                    hashTypeIterator *hi = hashTypeInitIterator(val);
+                    while (hashTypeNext(hi) != C_ERR) {
+                        sds sds_key = hashTypeCurrentObjectNewSds(hi,OBJ_HASH_KEY);
+                        sds sds_val = hashTypeCurrentObjectNewSds(hi,OBJ_HASH_VALUE);
+
+                        // printf("HSET %s %s %s\n", key->ptr, sds_key, sds_val);
+                        redisReply *reply = redisCommand(server.backend_db,"HSET %s %s %s", keyobj->ptr, sds_key, sds_val);
+
+                        freeReplyObject(reply);
+                        sdsfree(sds_key);
+                        sdsfree(sds_val);
+                    }
+                    hashTypeReleaseIterator(hi);
+                }
             }
             /* We compute the amount of memory freed by db*Delete() alone.
              * It is possible that actually the memory needed to propagate
