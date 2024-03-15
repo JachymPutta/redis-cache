@@ -1865,6 +1865,12 @@ void zaddGenericCommand(client *c, int flags) {
 
         ele = c->argv[scoreidx+1+j*2]->ptr;
         int retval = zsetAdd(zobj, score, ele, flags, &retflags, &newscore);
+
+        if (USE_REMOTE_BACKEND && bwAvailable(c->db)) {
+            // printf("ZADD %s %f %s\n", (char *) key->ptr, score, ele);
+            redisReply *reply = redisCommand(server.backend_db,"ZADD %s %f %s", key->ptr, score, ele);
+            freeReplyObject(reply);
+        }
         if (retval == 0) {
             addReplyError(c,nanerr);
             goto cleanup;

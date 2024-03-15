@@ -22,18 +22,23 @@ int bwAvailable(redisDb *db) {
   robj *key= createStringObject(server.rate_limit_key, strlen(server.rate_limit_key));
   robj *val = NULL;
 
-  dictEntry *de = dbFind(db, key->ptr);
+  // currently stalls forever on out of bandwidth
+  while (1) {
+    dictEntry *de = dbFind(db, key->ptr);
 
-  if (de) {
-    val = dictGetVal(de);
-    int64_t reqs_left = (int64_t) val->ptr;
+    if (de) {
+      val = dictGetVal(de);
+      int64_t reqs_left = (int64_t) val->ptr;
 
-    if (reqs_left > 0) {
-      reqs_left--;
-      val->ptr = (void *) (reqs_left);
-      return 1;
+      if (reqs_left > 0) {
+        reqs_left--;
+        val->ptr = (void *) (reqs_left);
+        return 1;
+      } 
     } 
-  } 
+
+    usleep(500 * 1000);
+  }
 
   // printf("Rate limit exceeded\n");
   return 0;

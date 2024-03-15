@@ -3022,6 +3022,7 @@ void zzlPrev(unsigned char *zl, unsigned char **eptr, unsigned char **sptr);
 unsigned char *zzlFirstInRange(unsigned char *zl, zrangespec *range);
 unsigned char *zzlLastInRange(unsigned char *zl, zrangespec *range);
 unsigned long zsetLength(const robj *zobj);
+robj *zsetTypeCreate(size_t size_hint, size_t val_len_hint);
 void zsetConvert(robj *zobj, int encoding);
 void zsetConvertToListpackIfNeeded(robj *zobj, size_t maxelelen, size_t totelelen);
 int zsetScore(robj *zobj, sds member, double *score);

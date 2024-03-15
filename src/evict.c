@@ -35,6 +35,7 @@
 #include "atomicvar.h"
 #include "script.h"
 #include <math.h>
+#include <assert.h>
 
 /* ----------------------------------------------------------------------------
  * Data structures
@@ -713,6 +714,19 @@ int performEvictions(void) {
                         sdsfree(sds_val);
                     }
                     hashTypeReleaseIterator(hi);
+                } else if (val->type == OBJ_ZSET) {
+                    assert(val->encoding == OBJ_ENCODING_SKIPLIST);
+                    zset *zs = val->ptr;
+                    dictIterator *di = dictGetIterator(zs->dict);
+                    dictEntry *de = dictNext(di);
+                    while(de) {
+                        sds sds_val = dictGetKey(de);
+                        double score = *(double*)dictGetVal(de);
+                        // printf("ZADD %s %f %s\n", (char *) keyobj->ptr, score, sds_val);
+                        redisReply *reply = redisCommand(server.backend_db,"ZADD %s %f %s", keyobj->ptr, score, sds_val);
+                        freeReplyObject(reply);
+                        de = dictNext(di);
+                    }
                 }
             }
             /* We compute the amount of memory freed by db*Delete() alone.
