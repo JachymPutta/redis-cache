@@ -29,6 +29,7 @@
 
 #include "server.h"
 #include <math.h> /* isnan(), isinf() */
+#include <assert.h>
 
 /* Forward declarations */
 int getGenericCommand(client *c);
@@ -303,6 +304,21 @@ void setCommand(client *c) {
 
     c->argv[2] = tryObjectEncoding(c->argv[2]);
     setGenericCommand(c,flags,c->argv[1],c->argv[2],expire,unit,NULL,NULL);
+
+    if (USE_REMOTE_BACKEND && bwAvailable(c->db)) {
+        assert(c->argv[2]->type == OBJ_STRING);
+        long long default_val = 0;
+        long long *ll_val = &default_val;
+        if (isObjectRepresentableAsLongLong(c->argv[2], ll_val) == C_OK) {
+            // printf("SET %s %lld\n", (char *) c->argv[1]->ptr, *ll_val);
+            redisReply *reply = redisCommand(server.backend_db,"SET %s %lld", c->argv[1]->ptr, *ll_val);
+            freeReplyObject(reply);
+        } else {
+            // printf("SET %s %s\n", (char *) c->argv[1]->ptr, (char *) c->argv[2]->ptr);
+            redisReply *reply = redisCommand(server.backend_db,"SET %s %s", c->argv[1]->ptr, c->argv[2]->ptr);
+            freeReplyObject(reply);
+        }
+    }
 }
 
 void setnxCommand(client *c) {
@@ -336,6 +352,12 @@ int getGenericCommand(client *c) {
 
 void getCommand(client *c) {
     getGenericCommand(c);
+    if (USE_REMOTE_BACKEND && bwAvailable(c->db)) {
+        // printf("GET %s\n", (char *) c->argv[1]->ptr);
+        redisReply *reply = redisCommand(server.backend_db,"GET %s", c->argv[1]->ptr);
+        // printf("reply->type: %d\n", reply->type);
+        freeReplyObject(reply);
+    }
 }
 
 /*

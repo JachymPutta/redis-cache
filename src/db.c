@@ -115,91 +115,92 @@ robj *lookupKey(redisDb *db, robj *key, int flags) {
             /* The key is no longer valid. */
             val = NULL;
         }
-    } else if (USE_REMOTE_BACKEND && bwAvailable(db)) {
-        // printf("lookupKey: key %s not found in local db, checking remote\n", key->ptr); 
-        redisReply *reply = NULL; 
-        u_int8_t val_type = -1;
+    } 
+    // else if (USE_REMOTE_BACKEND && bwAvailable(db)) {
+    //     // printf("lookupKey: key %s not found in local db, checking remote\n", key->ptr); 
+    //     redisReply *reply = NULL; 
+    //     u_int8_t val_type = -1;
 
-        sds key_str = sdsnew(key->ptr);
-        sds indices_str = sdsnew("_indices");
-        sds user_str = sdsnew("user");
+    //     sds key_str = sdsnew(key->ptr);
+    //     sds indices_str = sdsnew("_indices");
+    //     sds user_str = sdsnew("user");
 
-        // printf("sdscmp: %d\n", sdscmp(key_str, indices_str));
-        if (sdscmp(key_str, indices_str) == 0) {
-            // printf("ZRANGE %s 0 -1 WITHSCORES\n", (char *) key->ptr);
-            reply = redisCommand(server.backend_db,"ZRANGE %s 0 -1 WITHSCORES", key->ptr); 
-            val_type = OBJ_ZSET;
-        } else {
-            sdssubstr(key_str, 0, 4);
-            sdsRemoveFreeSpace(key_str, 0);
-            // printf("sdscmp: %d\n", sdscmp(key_str, user_str));
-            if (sdscmp(key_str, user_str) == 0) {
-                // printf("HGETALL %s \n", (char *) key->ptr);
-                reply = redisCommand(server.backend_db,"HGETALL %s", key->ptr); 
-                // printf("reply->type: %d\n", reply->type);
-                val_type = OBJ_HASH;
-            } else {
-                // printf("GET %s \n", (char *) key->ptr);
-                reply = redisCommand(server.backend_db,"GET %s", key->ptr);
-            }
-        }
+    //     // printf("sdscmp: %d\n", sdscmp(key_str, indices_str));
+    //     if (sdscmp(key_str, indices_str) == 0) {
+    //         // printf("ZRANGE %s 0 -1 WITHSCORES\n", (char *) key->ptr);
+    //         reply = redisCommand(server.backend_db,"ZRANGE %s 0 -1 WITHSCORES", key->ptr); 
+    //         val_type = OBJ_ZSET;
+    //     } else {
+    //         sdssubstr(key_str, 0, 4);
+    //         sdsRemoveFreeSpace(key_str, 0);
+    //         // printf("sdscmp: %d\n", sdscmp(key_str, user_str));
+    //         if (sdscmp(key_str, user_str) == 0) {
+    //             // printf("HGETALL %s \n", (char *) key->ptr);
+    //             reply = redisCommand(server.backend_db,"HGETALL %s", key->ptr); 
+    //             // printf("reply->type: %d\n", reply->type);
+    //             val_type = OBJ_HASH;
+    //         } else {
+    //             // printf("GET %s \n", (char *) key->ptr);
+    //             reply = redisCommand(server.backend_db,"GET %s", key->ptr);
+    //         }
+    //     }
 
-        if (reply->type != REDIS_REPLY_NIL && reply->type != REDIS_REPLY_ERROR) {
-            switch (reply->type) {
-            case REDIS_REPLY_STRING:
-                val = createStringObject(reply->str, reply->len);
-                break;
-            case REDIS_REPLY_INTEGER:
-                val = createStringObjectFromLongLong(reply->integer);
-                break;
-            case REDIS_REPLY_DOUBLE:
-                val = createStringObjectFromLongDouble(reply->dval, 0);
-                break;
-            case REDIS_REPLY_ARRAY: 
-                if (reply->elements == 0) {
-                    // printf("lookupKey: EMPTY ARRAY\n");
-                    val = NULL;
-                } else if (val_type == OBJ_HASH) {
-                    val = createHashObject();
-                    for (size_t i = 0; i < reply->elements; i += 2) {
-                        sds field = sdsnewlen(reply->element[i]->str, reply->element[i]->len);
-                        sds value = sdsnewlen(reply->element[i+1]->str, reply->element[i+1]->len);
+    //     if (reply->type != REDIS_REPLY_NIL && reply->type != REDIS_REPLY_ERROR) {
+    //         switch (reply->type) {
+    //         case REDIS_REPLY_STRING:
+    //             val = createStringObject(reply->str, reply->len);
+    //             break;
+    //         case REDIS_REPLY_INTEGER:
+    //             val = createStringObjectFromLongLong(reply->integer);
+    //             break;
+    //         case REDIS_REPLY_DOUBLE:
+    //             val = createStringObjectFromLongDouble(reply->dval, 0);
+    //             break;
+    //         case REDIS_REPLY_ARRAY: 
+    //             if (reply->elements == 0) {
+    //                 // printf("lookupKey: EMPTY ARRAY\n");
+    //                 val = NULL;
+    //             } else if (val_type == OBJ_HASH) {
+    //                 val = createHashObject();
+    //                 for (size_t i = 0; i < reply->elements; i += 2) {
+    //                     sds field = sdsnewlen(reply->element[i]->str, reply->element[i]->len);
+    //                     sds value = sdsnewlen(reply->element[i+1]->str, reply->element[i+1]->len);
 
-                        // printf("adding field: %s, value: %s\n", field, value);
-                        hashTypeSet(val, field, value, HASH_SET_COPY);
-                    }
-                } else if (val_type == OBJ_ZSET) {
-                    val = zsetTypeCreate(reply->elements / 2, 0);
-                    for (size_t i = 0; i < reply->elements; i += 2) {
-                        sds ele = sdsnewlen(reply->element[i]->str, reply->element[i]->len);
-                        sds score = sdsnewlen(reply->element[i+1]->str, reply->element[i+1]->len);
-                        // printf("score: %s, ele: %s\n", score, ele);
-                        double default_val = 0;
-                        int default_flag = 0;
-                        double *ll_val = &default_val;
-                        double *out_flags = &default_val;
-                        int *flags = &default_flag;
-                        if (string2d(score,sdslen(score), ll_val)) {
-                            zsetAdd(val, *ll_val, ele, ZADD_IN_NX, flags, out_flags);
-                        } else {
-                            printf("zsetAdd: failed to convert score : %s\n", score);
-                        }
+    //                     // printf("adding field: %s, value: %s\n", field, value);
+    //                     hashTypeSet(val, field, value, HASH_SET_COPY);
+    //                 }
+    //             } else if (val_type == OBJ_ZSET) {
+    //                 val = zsetTypeCreate(reply->elements / 2, 0);
+    //                 for (size_t i = 0; i < reply->elements; i += 2) {
+    //                     sds ele = sdsnewlen(reply->element[i]->str, reply->element[i]->len);
+    //                     sds score = sdsnewlen(reply->element[i+1]->str, reply->element[i+1]->len);
+    //                     // printf("score: %s, ele: %s\n", score, ele);
+    //                     double default_val = 0;
+    //                     int default_flag = 0;
+    //                     double *ll_val = &default_val;
+    //                     double *out_flags = &default_val;
+    //                     int *flags = &default_flag;
+    //                     if (string2d(score,sdslen(score), ll_val)) {
+    //                         zsetAdd(val, *ll_val, ele, ZADD_IN_NX, flags, out_flags);
+    //                     } else {
+    //                         printf("zsetAdd: failed to convert score : %s\n", score);
+    //                     }
 
-                    }
-                } else {
-                    printf("lookupKey: UNEXPECTED ARRAY TYPE: %d\n", val_type);
-                }
-                break;
-            }
-        }
-        if (val) {
-            dbAdd(db, key, val);
-            freeReplyObject(reply);
-            return lookupKey(db, key, flags);
-        } else {
-            freeReplyObject(reply);
-        }
-    }
+    //                 }
+    //             } else {
+    //                 printf("lookupKey: UNEXPECTED ARRAY TYPE: %d\n", val_type);
+    //             }
+    //             break;
+    //         }
+    //     }
+    //     if (val) {
+    //         dbAdd(db, key, val);
+    //         freeReplyObject(reply);
+    //         return lookupKey(db, key, flags);
+    //     } else {
+    //         freeReplyObject(reply);
+    //     }
+    // }
 
     if (val) {
         /* Update the access time for the ageing algorithm.
@@ -425,39 +426,6 @@ void setKey(client *c, redisDb *db, robj *key, robj *val, int flags) {
     incrRefCount(val);
     if (!(flags & SETKEY_KEEPTTL)) removeExpire(db,key);
     if (!(flags & SETKEY_NO_SIGNAL)) signalModifiedKey(c,db,key);
-
-    if (USE_REMOTE_BACKEND && bwAvailable(db)) {
-        if (val->type == OBJ_STRING) {
-            long long default_val = 0;
-            long long *ll_val = &default_val;
-            if (isObjectRepresentableAsLongLong(val, ll_val) == C_OK) {
-                printf("SET %s %lld\n", (char *) key->ptr, *ll_val);
-                redisReply *reply = redisCommand(server.backend_db,"SET %s %lld", key->ptr, *ll_val);
-                freeReplyObject(reply);
-            } else {
-                printf("SET %s %s\n", (char *) key->ptr, (char *) val->ptr);
-                redisReply *reply = redisCommand(server.backend_db,"SET %s %s", key->ptr, val->ptr);
-                freeReplyObject(reply);
-            }
-        } else {
-            printf("setKey: UNEXPECTED TYPE: %d\n", val->type);
-        } 
-        // else if (val->type == OBJ_HASH) {
-        //     hashTypeIterator *hi = hashTypeInitIterator(val);
-        //     while (hashTypeNext(hi) != C_ERR) {
-        //         sds sds_key = hashTypeCurrentObjectNewSds(hi,OBJ_HASH_KEY);
-        //         sds sds_val = hashTypeCurrentObjectNewSds(hi,OBJ_HASH_VALUE);
-
-        //         printf("HSET %s %s %s\n", key->ptr, sds_key, sds_val);
-        //         redisReply *reply = redisCommand(server.backend_db,"HSET %s %s %s", key->ptr, sds_key, sds_val);
-
-        //         freeReplyObject(reply);
-        //         sdsfree(sds_key);
-        //         sdsfree(sds_val);
-        //     }
-        //     hashTypeReleaseIterator(hi);
-        // }
-    }
 }
 
 /* Return a random key, in form of a Redis object.

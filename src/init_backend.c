@@ -37,6 +37,7 @@ int bwAvailable(redisDb *db) {
       } 
     } 
 
+    // printf("looking for key %s\n", server.rate_limit_key);
     usleep(500 * 1000);
   }
 
