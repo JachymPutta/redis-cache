@@ -684,7 +684,7 @@ int performEvictions(void) {
             db = server.db+bestdbid;
             robj *keyobj = createStringObject(bestkey,sdslen(bestkey));
 
-            if (USE_REMOTE_BACKEND && bwAvailable(db)) {
+            if (USE_REMOTE_BACKEND && (bwAvailable(db) || isRateLimKey(keyobj->ptr))) {
                 dictEntry *de = dbFind(db, keyobj->ptr);
                 robj *val = dictGetVal(de);
                 if (val->type == OBJ_STRING) {

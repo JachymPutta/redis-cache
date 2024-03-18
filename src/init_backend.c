@@ -44,3 +44,13 @@ int bwAvailable(redisDb *db) {
   // printf("Rate limit exceeded\n");
   return 0;
 }
+
+int isRateLimKey(void *key_ptr) {
+  sds key_str = sdsnew(key_ptr);
+  sds rate_lim_str = sdsnew(server.rate_limit_key);
+
+  // printf("key_str: %s rate_lim_str: %s\n", key_str, rate_lim_str);
+  // printf("strcmp: %d\n", strcmp(key_str, rate_lim_str));
+
+  return strcmp(key_str, rate_lim_str) == 0;
+}

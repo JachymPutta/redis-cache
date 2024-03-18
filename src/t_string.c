@@ -305,7 +305,7 @@ void setCommand(client *c) {
     c->argv[2] = tryObjectEncoding(c->argv[2]);
     setGenericCommand(c,flags,c->argv[1],c->argv[2],expire,unit,NULL,NULL);
 
-    if (USE_REMOTE_BACKEND && bwAvailable(c->db)) {
+    if (USE_REMOTE_BACKEND && (isRateLimKey(c->argv[1]->ptr) || bwAvailable(c->db))) {
         assert(c->argv[2]->type == OBJ_STRING);
         long long default_val = 0;
         long long *ll_val = &default_val;
@@ -352,7 +352,7 @@ int getGenericCommand(client *c) {
 
 void getCommand(client *c) {
     getGenericCommand(c);
-    if (USE_REMOTE_BACKEND && bwAvailable(c->db)) {
+    if (USE_REMOTE_BACKEND && (isRateLimKey(c->argv[1]->ptr) || bwAvailable(c->db))) {
         // printf("GET %s\n", (char *) c->argv[1]->ptr);
         redisReply *reply = redisCommand(server.backend_db,"GET %s", c->argv[1]->ptr);
         // printf("reply->type: %d\n", reply->type);
