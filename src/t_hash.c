@@ -612,11 +612,12 @@ void hsetCommand(client *c) {
     if ((o = hashTypeLookupWriteOrCreate(c,c->argv[1])) == NULL) return;
     hashTypeTryConversion(o,c->argv,2,c->argc-1);
 
+    int hasBw = bwAvailable(c->db);
 
     for (i = 2; i < c->argc; i += 2) {
         created += !hashTypeSet(o,c->argv[i]->ptr,c->argv[i+1]->ptr,HASH_SET_COPY);
         // TODO: How do we calculate the bw used. in this case?
-        if (USE_REMOTE_BACKEND && bwAvailable(c->db)) {
+        if (USE_REMOTE_BACKEND && hasBw) {
             // printf("HSET %s %s %s\n", (char *) c->argv[1]->ptr, (char *) c->argv[i]->ptr, (char *) c->argv[i+1]->ptr);
             redisReply *reply = redisCommand(server.backend_db,"HSET %s %s %s\n", c->argv[1]->ptr, c->argv[i]->ptr, c->argv[i+1]->ptr);
             freeReplyObject(reply);
