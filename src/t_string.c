@@ -305,16 +305,16 @@ void setCommand(client *c) {
     c->argv[2] = tryObjectEncoding(c->argv[2]);
     setGenericCommand(c,flags,c->argv[1],c->argv[2],expire,unit,NULL,NULL);
 
-    if (USE_REMOTE_BACKEND && (isRateLimKey(c->argv[1]->ptr) || bwAvailable(c->db))) {
+    if (USE_REMOTE_BACKEND && (isRateLimKey(c->argv[1]->ptr) || bwAvailable(c->db, false))) {
         assert(c->argv[2]->type == OBJ_STRING);
         long long default_val = 0;
         long long *ll_val = &default_val;
         if (isObjectRepresentableAsLongLong(c->argv[2], ll_val) == C_OK) {
-            // printf("SET %s %lld\n", (char *) c->argv[1]->ptr, *ll_val);
+            printf("write: SET %s %lld\n", (char *) c->argv[1]->ptr, *ll_val);
             redisReply *reply = redisCommand(server.backend_db,"SET %s %lld", c->argv[1]->ptr, *ll_val);
             freeReplyObject(reply);
         } else {
-            // printf("SET %s %s\n", (char *) c->argv[1]->ptr, (char *) c->argv[2]->ptr);
+            printf("write: SET %s %s\n", (char *) c->argv[1]->ptr, (char *) c->argv[2]->ptr);
             redisReply *reply = redisCommand(server.backend_db,"SET %s %s", c->argv[1]->ptr, c->argv[2]->ptr);
             freeReplyObject(reply);
         }
@@ -350,13 +350,51 @@ int getGenericCommand(client *c) {
     return C_OK;
 }
 
-void getCommand(client *c) {
-    getGenericCommand(c);
-    if (USE_REMOTE_BACKEND && (isRateLimKey(c->argv[1]->ptr) || bwAvailable(c->db))) {
+int getRemoteCommand(client *c) {
+    robj *o = lookupKeyRead(c->db, c->argv[1]);
+    if (!o && (isRateLimKey(c->argv[1]->ptr) || bwAvailable(c->db, false))) {
         // printf("GET %s\n", (char *) c->argv[1]->ptr);
         redisReply *reply = redisCommand(server.backend_db,"GET %s", c->argv[1]->ptr);
         // printf("reply->type: %d\n", reply->type);
+        switch (reply->type) {
+        case REDIS_REPLY_STRING:
+            o = createStringObject(reply->str, reply->len);
+            break;
+        case REDIS_REPLY_INTEGER:
+            o = createStringObjectFromLongLong(reply->integer);
+            break;
+        case REDIS_REPLY_DOUBLE:
+            o = createStringObjectFromLongDouble(reply->dval, 0);
+            break;
+        default:
+            o = NULL;
+            break;
+        }
+        if (o) {
+            robj *key = createStringObject(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
+            dbAdd(c->db, key, o);
+        }
         freeReplyObject(reply);
+    }
+
+    if (!o) {
+        addReplyOrErrorObject(c, shared.null[c->resp]);
+        return C_OK;
+    }
+
+    if (checkType(c,o,OBJ_STRING)) {
+        return C_ERR;
+    }
+
+    addReplyBulk(c,o);
+    return C_OK;
+}
+
+void getCommand(client *c) {
+    if (USE_REMOTE_BACKEND) {
+        getRemoteCommand(c);
+    } else {
+        getGenericCommand(c);
     }
 }
 

@@ -1,8 +1,9 @@
- #include <stdio.h>
- #include <stdlib.h>
- #include <string.h>
- #include "init_backend.h"
- #include "server.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "init_backend.h"
+#include "server.h"
+#include "sds.h"
 
 
 redisContext *connect_to_backend(void) {
@@ -18,7 +19,7 @@ redisContext *connect_to_backend(void) {
   return c;
 }
 
-int bwAvailable(redisDb *db) {
+int bwAvailable(redisDb *db, int isEviction) {
   robj *key= createStringObject(server.rate_limit_key, strlen(server.rate_limit_key));
   robj *val = NULL;
 
@@ -37,7 +38,10 @@ int bwAvailable(redisDb *db) {
       } 
     } 
 
-    // printf("looking for key %s\n", server.rate_limit_key);
+    if (isEviction) {
+      return 1;
+    }
+    // printf("Stuck here");
     usleep(500 * 1000);
   }
 
@@ -53,4 +57,23 @@ int isRateLimKey(void *key_ptr) {
   // printf("strcmp: %d\n", strcmp(key_str, rate_lim_str));
 
   return strcmp(key_str, rate_lim_str) == 0;
+}
+
+int isIndicesKey(void *key_ptr) {
+  sds key_str = sdsnew(key_ptr);
+  sds indices_str = sdsnew("_indices");
+
+  // printf("key_str: %s rate_lim_str: %s\n", key_str, indices_str);
+  // printf("strcmp: %d\n", strcmp(key_str, indices_str));
+
+  return strcmp(key_str, indices_str) == 0;
+}
+
+int isUserKey(void *key_ptr) {
+  sds key_str = sdsnew(key_ptr);
+  sds user_str = sdsnew("user");
+  sdsrange(key_str, 0, 4);
+  sdsRemoveFreeSpace(key_str);
+  // printf("sdscmp: %d\n", sdscmp(key_str, user_str));
+  return sdscmp(key_str, user_str) == 0;
 }

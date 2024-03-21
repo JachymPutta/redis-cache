@@ -635,6 +635,21 @@ int performEvictions(void) {
                     }
                     de = kvstoreDictFind(kvs, pool[k].slot, pool[k].key);
 
+                    if (USE_REMOTE_BACKEND && de) {
+                        bestkey = dictGetKey(de);
+                        sds rate_lim_str = sdsnew(server.rate_limit_key);
+                        sds indices_str = sdsnew("_indices");
+
+                        int isRateLim = strcmp(bestkey, rate_lim_str) == 0;
+                        int isIndices = strcmp(bestkey, indices_str) == 0;
+                        // printf("bestkey: %s, isRateLim: %d, isIndices: %d\n", bestkey, isRateLim, isIndices);
+
+                        if (isRateLim || isIndices) {
+                        // if (isRateLim) {
+                            de = NULL;
+                            bestkey = NULL;
+                        }
+                    } 
                     /* Remove the entry from the pool. */
                     if (pool[k].key != pool[k].cached)
                         sdsfree(pool[k].key);
@@ -644,10 +659,12 @@ int performEvictions(void) {
                     /* If the key exists, is our pick. Otherwise it is
                      * a ghost and we need to try the next element. */
                     if (de) {
+                        // printf("de exists: bestkey: %s\n", bestkey);
                         bestkey = dictGetKey(de);
                         break;
                     } else {
                         /* Ghost... Iterate again. */
+                        // usleep(500);
                     }
                 }
             }
@@ -684,29 +701,34 @@ int performEvictions(void) {
             db = server.db+bestdbid;
             robj *keyobj = createStringObject(bestkey,sdslen(bestkey));
 
-            if (USE_REMOTE_BACKEND && (bwAvailable(db) || isRateLimKey(keyobj->ptr))) {
+            if (USE_REMOTE_BACKEND) {
+                bwAvailable(db, true); // Throw away the result, since we need to evict either way
+                // printf("evicting %s\n", bestkey);
                 dictEntry *de = dbFind(db, keyobj->ptr);
                 robj *val = dictGetVal(de);
                 if (val->type == OBJ_STRING) {
+                    // printf("Evict String %s\n", keyobj->ptr);
+                    // assert(0);
                     long long default_val = 0;
                     long long *ll_val = &default_val;
                     if (isObjectRepresentableAsLongLong(val, ll_val) == C_OK) {
-                        // printf("SET %s %lld\n", key->ptr, *ll_val);
+                        printf("evict: SET %s %lld\n", bestkey, *ll_val);
                         redisReply *reply = redisCommand(server.backend_db,"SET %s %lld", keyobj->ptr, *ll_val);
                         freeReplyObject(reply);
                     } else {
-                        // printf("SET %s %s\n", key->ptr, val->ptr);
+                        // printf("SET %s %s\n", bestkey, val->ptr);
+                        printf("evict: SET %s \n", bestkey);
                         redisReply *reply = redisCommand(server.backend_db,"SET %s %s", keyobj->ptr, val->ptr);
                         freeReplyObject(reply);
                     }
                 } else if (val->type == OBJ_HASH) {
-
                     hashTypeIterator *hi = hashTypeInitIterator(val);
+                    // printf("Evict HASH\n");
                     while (hashTypeNext(hi) != C_ERR) {
                         sds sds_key = hashTypeCurrentObjectNewSds(hi,OBJ_HASH_KEY);
                         sds sds_val = hashTypeCurrentObjectNewSds(hi,OBJ_HASH_VALUE);
 
-                        // printf("HSET %s %s %s\n", key->ptr, sds_key, sds_val);
+                        printf("evict: HSET %s %s\n", bestkey, sds_key);
                         redisReply *reply = redisCommand(server.backend_db,"HSET %s %s %s", keyobj->ptr, sds_key, sds_val);
 
                         freeReplyObject(reply);
@@ -715,6 +737,8 @@ int performEvictions(void) {
                     }
                     hashTypeReleaseIterator(hi);
                 } else if (val->type == OBJ_ZSET) {
+                    // printf("Evict ZADD\n");
+                    // assert(0);
                     assert(val->encoding == OBJ_ENCODING_SKIPLIST);
                     zset *zs = val->ptr;
                     dictIterator *di = dictGetIterator(zs->dict);
@@ -722,7 +746,8 @@ int performEvictions(void) {
                     while(de) {
                         sds sds_val = dictGetKey(de);
                         double score = *(double*)dictGetVal(de);
-                        // printf("ZADD %s %f %s\n", (char *) keyobj->ptr, score, sds_val);
+                        printf("evict: ZADD %s %f %s\n", bestkey, score, sds_val);
+                        // printf("evict: ZADD %s %f\n", bestkey, score);
                         redisReply *reply = redisCommand(server.backend_db,"ZADD %s %f %s", keyobj->ptr, score, sds_val);
                         freeReplyObject(reply);
                         de = dictNext(di);

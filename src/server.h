@@ -2550,8 +2550,10 @@ void *moduleGetHandleByName(char *modulename);
 int moduleIsModuleCommand(void *module_handle, struct redisCommand *cmd);
 
 /* Utils */
-int bwAvailable(redisDb *db);
+int bwAvailable(redisDb *db, int isEviction);
 int isRateLimKey(void *key_ptr);
+int isIndicesKey(void *key_ptr);
+int isUserKey(void *key_ptr);
 long long ustime(void);
 mstime_t mstime(void);
 mstime_t commandTimeSnapshot(void);
