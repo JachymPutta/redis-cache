@@ -372,7 +372,14 @@ int getRemoteCommand(client *c) {
         }
         if (o) {
             robj *key = createStringObject(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
-            dbAdd(c->db, key, o);
+            int found = (lookupKeyWrite(c->db,key) != NULL);
+            int setkey_flags = 0;
+            setkey_flags |= found ? SETKEY_ALREADY_EXIST : SETKEY_DOESNT_EXIST;
+
+            setKey(c,c->db,key,o,setkey_flags);
+            server.dirty++;
+            notifyKeyspaceEvent(NOTIFY_STRING,"set",key,c->db->id);
+            // dbAdd(c->db, key, o);
         }
         freeReplyObject(reply);
     }

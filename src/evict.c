@@ -635,21 +635,21 @@ int performEvictions(void) {
                     }
                     de = kvstoreDictFind(kvs, pool[k].slot, pool[k].key);
 
-                    if (USE_REMOTE_BACKEND && de) {
-                        bestkey = dictGetKey(de);
-                        sds rate_lim_str = sdsnew(server.rate_limit_key);
-                        sds indices_str = sdsnew("_indices");
+                    // if (USE_REMOTE_BACKEND && de) {
+                    //     bestkey = dictGetKey(de);
+                    //     sds rate_lim_str = sdsnew(server.rate_limit_key);
+                    //     sds indices_str = sdsnew("_indices");
 
-                        int isRateLim = strcmp(bestkey, rate_lim_str) == 0;
-                        int isIndices = strcmp(bestkey, indices_str) == 0;
-                        // printf("bestkey: %s, isRateLim: %d, isIndices: %d\n", bestkey, isRateLim, isIndices);
+                    //     int isRateLim = strcmp(bestkey, rate_lim_str) == 0;
+                    //     int isIndices = strcmp(bestkey, indices_str) == 0;
+                    //     // printf("bestkey: %s, isRateLim: %d, isIndices: %d\n", bestkey, isRateLim, isIndices);
 
-                        if (isRateLim || isIndices) {
-                        // if (isRateLim) {
-                            de = NULL;
-                            bestkey = NULL;
-                        }
-                    } 
+                    //     if (isRateLim || isIndices) {
+                    //     // if (isRateLim) {
+                    //         de = NULL;
+                    //         bestkey = NULL;
+                    //     }
+                    // } 
                     /* Remove the entry from the pool. */
                     if (pool[k].key != pool[k].cached)
                         sdsfree(pool[k].key);
