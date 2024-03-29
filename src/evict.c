@@ -636,16 +636,16 @@ int performEvictions(void) {
                     de = kvstoreDictFind(kvs, pool[k].slot, pool[k].key);
 
                     /* Don't evict the rate limit key */
-                    if (USE_REMOTE_BACKEND && de) {
-                        bestkey = dictGetKey(de);
-                        sds rate_lim_str = sdsnew(server.rate_limit_key);
+                    // if (USE_REMOTE_BACKEND && de) {
+                    //     bestkey = dictGetKey(de);
+                    //     sds rate_lim_str = sdsnew(server.rate_limit_key);
 
-                        int isRateLim = strcmp(bestkey, rate_lim_str) == 0;
-                        if (isRateLim) {
-                            de = NULL;
-                            bestkey = NULL;
-                        }
-                    } 
+                    //     int isRateLim = strcmp(bestkey, rate_lim_str) == 0;
+                    //     if (isRateLim) {
+                    //         de = NULL;
+                    //         bestkey = NULL;
+                    //     }
+                    // } 
 
                     /* Remove the entry from the pool. */
                     if (pool[k].key != pool[k].cached)
@@ -656,12 +656,10 @@ int performEvictions(void) {
                     /* If the key exists, is our pick. Otherwise it is
                      * a ghost and we need to try the next element. */
                     if (de) {
-                        // printf("de exists: bestkey: %s\n", bestkey);
                         bestkey = dictGetKey(de);
                         break;
                     } else {
                         /* Ghost... Iterate again. */
-                        // usleep(500);
                     }
                 }
             }

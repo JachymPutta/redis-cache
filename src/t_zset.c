@@ -1858,8 +1858,6 @@ void zaddGenericCommand(client *c, int flags) {
         zsetTypeMaybeConvert(zobj, elements);
     }
 
-    int hasBw = bwAvailable(c->db, false);
-
     for (j = 0; j < elements; j++) {
         double newscore;
         score = scores[j];
@@ -1867,13 +1865,6 @@ void zaddGenericCommand(client *c, int flags) {
 
         ele = c->argv[scoreidx+1+j*2]->ptr;
         int retval = zsetAdd(zobj, score, ele, flags, &retflags, &newscore);
-
-        if (USE_REMOTE_BACKEND && hasBw) {
-            printf("write: ZADD %s %f %s\n", (char *) key->ptr, score, ele);
-            // printf("ZADD\n");
-            redisReply *reply = redisCommand(server.backend_db,"ZADD %s %f %s", key->ptr, score, ele);
-            freeReplyObject(reply);
-        }
         if (retval == 0) {
             addReplyError(c,nanerr);
             goto cleanup;

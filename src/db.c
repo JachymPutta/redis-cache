@@ -115,7 +115,7 @@ robj *lookupKey(redisDb *db, robj *key, int flags) {
             /* The key is no longer valid. */
             val = NULL;
         }
-    } 
+    }
 
     if (val) {
         /* Update the access time for the ageing algorithm.

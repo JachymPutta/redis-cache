@@ -24,28 +24,24 @@ int bwAvailable(redisDb *db, int isEviction) {
   robj *val = NULL;
 
   // currently stalls forever on out of bandwidth
-  while (1) {
-    val = lookupKeyWrite(db, key);
+  val = lookupKeyWrite(db, key);
 
-    if (val) {
-      int64_t reqs_left = (int64_t) val->ptr;
+  if (val) {
+    int64_t reqs_left = (int64_t) val->ptr;
 
-      if (reqs_left > 0) {
-        reqs_left--;
-        val->ptr = (void *) (reqs_left);
-        return 1;
-      } 
-    } 
-
-    if (isEviction) {
+    if (reqs_left > 0) {
+      reqs_left--;
+      val->ptr = (void *) (reqs_left);
       return 1;
-    }
-    // printf("Stuck here");
-    // usleep(500 * 1000);
+    } 
+  } 
+
+  if (isEviction) {
+    return 1;
+  } else {
+    return 0;
   }
 
-  // printf("Rate limit exceeded\n");
-  return 0;
 }
 
 int isRateLimKey(void *key_ptr) {

@@ -612,19 +612,8 @@ void hsetCommand(client *c) {
     if ((o = hashTypeLookupWriteOrCreate(c,c->argv[1])) == NULL) return;
     hashTypeTryConversion(o,c->argv,2,c->argc-1);
 
-    int hasBw = bwAvailable(c->db, false);
-
-    for (i = 2; i < c->argc; i += 2) {
+    for (i = 2; i < c->argc; i += 2)
         created += !hashTypeSet(o,c->argv[i]->ptr,c->argv[i+1]->ptr,HASH_SET_COPY);
-        // TODO: How do we calculate the bw used. in this case?
-        if (USE_REMOTE_BACKEND && hasBw) {
-            // printf("HSET %s %s %s\n", (char *) c->argv[1]->ptr, (char *) c->argv[i]->ptr, (char *) c->argv[i+1]->ptr);
-            printf("write: HSET %s %s\n", (char *) c->argv[1]->ptr, (char *) c->argv[i]->ptr);
-            // printf("HSET\n");
-            redisReply *reply = redisCommand(server.backend_db,"HSET %s %s %s\n", c->argv[1]->ptr, c->argv[i]->ptr, c->argv[i+1]->ptr);
-            freeReplyObject(reply);
-        }
-    }
 
     /* HMSET (deprecated) and HSET return value is different. */
     char *cmdname = c->argv[0]->ptr;
@@ -874,52 +863,6 @@ void genericHgetallCommand(client *c, int flags) {
     serverAssert(count == length);
 }
 
-void remoteHgetallCommand(client *c) {
-    hashTypeIterator *hi;
-    int length, count = 0;
-    robj *o = lookupKeyReadOrReply(c,c->argv[1],shared.emptymap[c->resp]);
-
-
-    if (o == NULL) {
-        // printf("remoteHgetallCommand: %s is null\n", c->argv[1]->ptr);
-        redisReply *reply = redisCommand(server.backend_db,"HGETALL %s", c->argv[1]->ptr);
-        // printf("remoteHgetallCommand: reply->type: %d\n", reply->type);
-        if (reply->type == REDIS_REPLY_ARRAY) {
-            if (!reply->elements) return;
-            // printf("remoteHgetallCommand: reply->elements: %d\n", reply->elements);
-            o = createHashObject();
-            for (size_t i = 0; i < reply->elements; i += 2) {
-                sds field = sdsnewlen(reply->element[i]->str, reply->element[i]->len);
-                sds value = sdsnewlen(reply->element[i+1]->str, reply->element[i+1]->len);
-
-                // printf("remoteHgetallCommand: field: %s, value: %s\n", field, value);
-                hashTypeSet(o, field, value, HASH_SET_COPY);
-            }
-            robj *key = createStringObject(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
-            dbAdd(c->db, key, o);
-            freeReplyObject(reply);
-        }
-
-
-        if (checkType(c,o,OBJ_HASH)) return;
-    }
-    length = hashTypeLength(o);
-    addReplyMapLen(c, length);
-
-    hi = hashTypeInitIterator(o);
-    while (hashTypeNext(hi) != C_ERR) {
-        addHashIteratorCursorToReply(c, hi, OBJ_HASH_KEY);
-        addHashIteratorCursorToReply(c, hi, OBJ_HASH_VALUE);
-        count++;
-    }
-
-    hashTypeReleaseIterator(hi);
-
-    /* Make sure we returned the right number of elements. */
-    serverAssert(count == length);
-
-}
-
 void hkeysCommand(client *c) {
     genericHgetallCommand(c,OBJ_HASH_KEY);
 }
@@ -929,11 +872,7 @@ void hvalsCommand(client *c) {
 }
 
 void hgetallCommand(client *c) {
-    if (USE_REMOTE_BACKEND) {
-        remoteHgetallCommand(c);
-    } else {
-        genericHgetallCommand(c,OBJ_HASH_KEY|OBJ_HASH_VALUE);
-    }
+    genericHgetallCommand(c,OBJ_HASH_KEY|OBJ_HASH_VALUE);
 }
 
 void hexistsCommand(client *c) {

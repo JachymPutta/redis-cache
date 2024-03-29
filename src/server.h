@@ -2551,9 +2551,6 @@ int moduleIsModuleCommand(void *module_handle, struct redisCommand *cmd);
 
 /* Utils */
 int bwAvailable(redisDb *db, int isEviction);
-int isRateLimKey(void *key_ptr);
-int isIndicesKey(void *key_ptr);
-int isUserKey(void *key_ptr);
 long long ustime(void);
 mstime_t mstime(void);
 mstime_t commandTimeSnapshot(void);
@@ -2685,6 +2682,7 @@ client *lookupClientByID(uint64_t id);
 int authRequired(client *c);
 void putClientInPendingWriteQueue(client *c);
 
+int isRateLimKey(void *key_ptr);
 /* logreqres.c - logging of requests and responses */
 void reqresReset(client *c, int free_buf);
 void reqresSaveClientReplyOffset(client *c);
@@ -3025,7 +3023,6 @@ void zzlPrev(unsigned char *zl, unsigned char **eptr, unsigned char **sptr);
 unsigned char *zzlFirstInRange(unsigned char *zl, zrangespec *range);
 unsigned char *zzlLastInRange(unsigned char *zl, zrangespec *range);
 unsigned long zsetLength(const robj *zobj);
-robj *zsetTypeCreate(size_t size_hint, size_t val_len_hint);
 void zsetConvert(robj *zobj, int encoding);
 void zsetConvertToListpackIfNeeded(robj *zobj, size_t maxelelen, size_t totelelen);
 int zsetScore(robj *zobj, sds member, double *score);
