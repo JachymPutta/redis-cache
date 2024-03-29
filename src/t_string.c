@@ -310,11 +310,12 @@ void setCommand(client *c) {
         long long default_val = 0;
         long long *ll_val = &default_val;
         if (isObjectRepresentableAsLongLong(c->argv[2], ll_val) == C_OK) {
-            printf("write: SET %s %lld\n", (char *) c->argv[1]->ptr, *ll_val);
+            // printf("write: SET %s %lld\n", (char *) c->argv[1]->ptr, *ll_val);
             redisReply *reply = redisCommand(server.backend_db,"SET %s %lld", c->argv[1]->ptr, *ll_val);
             freeReplyObject(reply);
         } else {
-            printf("write: SET %s %s\n", (char *) c->argv[1]->ptr, (char *) c->argv[2]->ptr);
+            // printf("write: SET %s\n", (char *) c->argv[1]->ptr, (char *) c->argv[2]->ptr);
+            // printf("write: SET %s\n", (char *) c->argv[1]->ptr);
             redisReply *reply = redisCommand(server.backend_db,"SET %s %s", c->argv[1]->ptr, c->argv[2]->ptr);
             freeReplyObject(reply);
         }

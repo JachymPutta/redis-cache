@@ -25,10 +25,9 @@ int bwAvailable(redisDb *db, int isEviction) {
 
   // currently stalls forever on out of bandwidth
   while (1) {
-    dictEntry *de = dbFind(db, key->ptr);
+    val = lookupKeyWrite(db, key);
 
-    if (de) {
-      val = dictGetVal(de);
+    if (val) {
       int64_t reqs_left = (int64_t) val->ptr;
 
       if (reqs_left > 0) {
@@ -42,7 +41,7 @@ int bwAvailable(redisDb *db, int isEviction) {
       return 1;
     }
     // printf("Stuck here");
-    usleep(500 * 1000);
+    // usleep(500 * 1000);
   }
 
   // printf("Rate limit exceeded\n");
@@ -57,23 +56,4 @@ int isRateLimKey(void *key_ptr) {
   // printf("strcmp: %d\n", strcmp(key_str, rate_lim_str));
 
   return strcmp(key_str, rate_lim_str) == 0;
-}
-
-int isIndicesKey(void *key_ptr) {
-  sds key_str = sdsnew(key_ptr);
-  sds indices_str = sdsnew("_indices");
-
-  // printf("key_str: %s rate_lim_str: %s\n", key_str, indices_str);
-  // printf("strcmp: %d\n", strcmp(key_str, indices_str));
-
-  return strcmp(key_str, indices_str) == 0;
-}
-
-int isUserKey(void *key_ptr) {
-  sds key_str = sdsnew(key_ptr);
-  sds user_str = sdsnew("user");
-  sdsrange(key_str, 0, 4);
-  sdsRemoveFreeSpace(key_str);
-  // printf("sdscmp: %d\n", sdscmp(key_str, user_str));
-  return sdscmp(key_str, user_str) == 0;
 }
