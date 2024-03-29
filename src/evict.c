@@ -35,7 +35,6 @@
 #include "atomicvar.h"
 #include "script.h"
 #include <math.h>
-#include <assert.h>
 
 /* ----------------------------------------------------------------------------
  * Data structures
@@ -635,18 +634,6 @@ int performEvictions(void) {
                     }
                     de = kvstoreDictFind(kvs, pool[k].slot, pool[k].key);
 
-                    /* Don't evict the rate limit key */
-                    // if (USE_REMOTE_BACKEND && de) {
-                    //     bestkey = dictGetKey(de);
-                    //     sds rate_lim_str = sdsnew(server.rate_limit_key);
-
-                    //     int isRateLim = strcmp(bestkey, rate_lim_str) == 0;
-                    //     if (isRateLim) {
-                    //         de = NULL;
-                    //         bestkey = NULL;
-                    //     }
-                    // } 
-
                     /* Remove the entry from the pool. */
                     if (pool[k].key != pool[k].cached)
                         sdsfree(pool[k].key);
@@ -695,32 +682,6 @@ int performEvictions(void) {
         if (bestkey) {
             db = server.db+bestdbid;
             robj *keyobj = createStringObject(bestkey,sdslen(bestkey));
-
-            if (USE_REMOTE_BACKEND) {
-                bwAvailable(db, true); // Throw away the result, since we need to evict either way
-                // printf("evicting %s\n", bestkey);
-                // dictEntry *de = dbFind(db, keyobj->ptr);
-                // robj *val = dictGetVal(de);
-                robj *val = lookupKeyRead(db, keyobj);
-                if (val->type == OBJ_STRING) {
-                    // printf("Evict String %s\n", keyobj->ptr);
-                    long long default_val = 0;
-                    long long *ll_val = &default_val;
-                    if (isObjectRepresentableAsLongLong(val, ll_val) == C_OK) {
-                        // printf("evict: SET %s %lld\n", bestkey, *ll_val);
-                        redisReply *reply = redisCommand(server.backend_db,"SET %s %lld", keyobj->ptr, *ll_val);
-                        freeReplyObject(reply);
-                    } else {
-                        // printf("SET %s %s\n", bestkey, val->ptr);
-                        // printf("evict: SET %s \n", bestkey);
-                        redisReply *reply = redisCommand(server.backend_db,"SET %s %s", keyobj->ptr, val->ptr);
-                        freeReplyObject(reply);
-                    }
-                } else {
-                    printf("Unsupported type %d\n", val->type);
-                    assert(0);
-                }
-            }
             /* We compute the amount of memory freed by db*Delete() alone.
              * It is possible that actually the memory needed to propagate
              * the DEL in AOF and replication link is greater than the one
