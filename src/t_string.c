@@ -381,6 +381,11 @@ int getRemoteCommand(client *c) {
             server.dirty++;
             notifyKeyspaceEvent(NOTIFY_STRING,"set",key,c->db->id);
             // dbAdd(c->db, key, o);
+            // decrRefCount(key);
+
+            uint64_t max_expire = 0xFFFFFFFFFFFFFFFF;
+            setExpire(c,c->db,key,max_expire);
+            notifyKeyspaceEvent(NOTIFY_GENERIC,"expire",key,c->db->id);
         }
         freeReplyObject(reply);
     }
