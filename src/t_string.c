@@ -352,11 +352,13 @@ int getGenericCommand(client *c) {
 }
 
 int getRemoteCommand(client *c) {
+    printf("get: looking up locally\n");
     robj *o = lookupKeyRead(c->db, c->argv[1]);
+    printf("get: lookup done key found? %d\n", o != NULL);
     if (!o && (isRateLimKey(c->argv[1]->ptr) || bwAvailable(c->db, false))) {
-        // printf("GET %s\n", (char *) c->argv[1]->ptr);
+        printf("get: remote GET %s\n", (char *) c->argv[1]->ptr);
         redisReply *reply = redisCommand(server.backend_db,"GET %s", c->argv[1]->ptr);
-        // printf("reply->type: %d\n", reply->type);
+        printf("get: reply->type: %d\n", reply->type);
         switch (reply->type) {
         case REDIS_REPLY_STRING:
             o = createStringObject(reply->str, reply->len);
@@ -368,14 +370,20 @@ int getRemoteCommand(client *c) {
             o = createStringObjectFromLongDouble(reply->dval, 0);
             break;
         default:
-            o = NULL;
-            break;
+            addReplyOrErrorObject(c, shared.null[c->resp]);
+            return C_OK;
         }
-        if (o) {
+
+        size_t used = zmalloc_used_memory() - freeMemoryGetNotCountedMemory();
+        int has_space = (server.maxmemory + 1000000) > used;
+        printf("used: %zu max: %llu have space = %d\n", used, server.maxmemory, server.maxmemory > used);
+        if (o && has_space) {
+        // if (o) {
             robj *key = createStringObject(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
-            int found = (lookupKeyWrite(c->db,key) != NULL);
-            int setkey_flags = 0;
-            setkey_flags |= found ? SETKEY_ALREADY_EXIST : SETKEY_DOESNT_EXIST;
+            // int found = (lookupKeyWrite(c->db,key) != NULL);
+            // int setkey_flags = 0;
+            // setkey_flags |= found ? SETKEY_ALREADY_EXIST : SETKEY_DOESNT_EXIST;
+            int setkey_flags = SETKEY_DOESNT_EXIST;
 
             setKey(c,c->db,key,o,setkey_flags);
             server.dirty++;
@@ -383,11 +391,14 @@ int getRemoteCommand(client *c) {
             // dbAdd(c->db, key, o);
             // decrRefCount(key);
 
-            uint64_t max_expire = 0xFFFFFFFFFFFFFFFF;
+            uint64_t max_expire = 1844674407370955161;
             setExpire(c,c->db,key,max_expire);
             notifyKeyspaceEvent(NOTIFY_GENERIC,"expire",key,c->db->id);
         }
         freeReplyObject(reply);
+        addReplyBulk(c,o);
+        decrRefCount(o);
+        return C_OK;
     }
 
     if (!o) {
