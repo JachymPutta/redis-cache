@@ -352,13 +352,13 @@ int getGenericCommand(client *c) {
 }
 
 int getRemoteCommand(client *c) {
-    printf("get: looking up locally\n");
+    // printf("get: looking up locally\n");
     robj *o = lookupKeyRead(c->db, c->argv[1]);
-    printf("get: lookup done key found? %d\n", o != NULL);
+    // printf("get: lookup done key found? %d\n", o != NULL);
     if (!o && (isRateLimKey(c->argv[1]->ptr) || bwAvailable(c->db, false))) {
-        printf("get: remote GET %s\n", (char *) c->argv[1]->ptr);
+        // printf("get: remote GET %s\n", (char *) c->argv[1]->ptr);
         redisReply *reply = redisCommand(server.backend_db,"GET %s", c->argv[1]->ptr);
-        printf("get: reply->type: %d\n", reply->type);
+        // printf("get: reply->type: %d\n", reply->type);
         switch (reply->type) {
         case REDIS_REPLY_STRING:
             o = createStringObject(reply->str, reply->len);
@@ -376,7 +376,7 @@ int getRemoteCommand(client *c) {
 
         size_t used = zmalloc_used_memory() - freeMemoryGetNotCountedMemory();
         int has_space = (server.maxmemory + 1000000) > used;
-        printf("used: %zu max: %llu have space = %d\n", used, server.maxmemory, server.maxmemory > used);
+        // printf("used: %zu max: %llu have space = %d\n", used, server.maxmemory, server.maxmemory > used);
         if (o && has_space) {
         // if (o) {
             robj *key = createStringObject(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
