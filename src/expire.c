@@ -717,23 +717,6 @@ void expireGenericCommand(client *c, long long basetime, int unit) {
 
 /* EXPIRE key seconds [ NX | XX | GT | LT] */
 void expireCommand(client *c) {
-    // if (isRateLimKey(c->argv[1]->ptr)) {
-    //     printf("rate limit key\n");
-    //     robj *key = createStringObject(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
-    //     robj *val = c->argv[2];
-    //     printf("key: %s, val: %s\n", key->ptr, val->ptr);
-    //     int found = (lookupKeyWrite(c->db,key) != NULL);
-    //     printf("found %d\n", found);
-    //     robj *o = lookupKeyRead(c->db, c->argv[1]);
-    //     printf("found read %d\n", o != NULL);
-
-    //     int setkey_flags = 0;
-    //     setkey_flags |= found ? SETKEY_ALREADY_EXIST : SETKEY_DOESNT_EXIST;
-
-    //     setKey(c,c->db,key,val,setkey_flags);
-    //     server.dirty++;
-    //     notifyKeyspaceEvent(NOTIFY_STRING,"set",key,c->db->id);
-    // }
     expireGenericCommand(c,commandTimeSnapshot(),UNIT_SECONDS);
 }
 

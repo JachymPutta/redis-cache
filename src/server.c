@@ -4030,8 +4030,11 @@ int processCommand(client *c) {
         if (server.current_client == NULL) return C_ERR;
 
         if (out_of_memory && is_denyoom_command) {
-            rejectCommand(c, shared.oomerr);
-            return C_OK;
+            // printf("out_of_memory: is getting triggered here\n");
+            if (!isRateLimKey(c->argv[1]->ptr)) {
+                rejectCommand(c, shared.oomerr);
+                return C_OK;
+            }
         }
 
         /* Save out_of_memory result at command start, otherwise if we check OOM
