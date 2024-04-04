@@ -29,6 +29,7 @@
 
 #include "server.h"
 #include <math.h> /* isnan(), isinf() */
+#include <assert.h>
 
 /* Forward declarations */
 int getGenericCommand(client *c);
@@ -303,6 +304,21 @@ void setCommand(client *c) {
 
     c->argv[2] = tryObjectEncoding(c->argv[2]);
     setGenericCommand(c,flags,c->argv[1],c->argv[2],expire,unit,NULL,NULL);
+
+    if (USE_REMOTE_BACKEND && (isRateLimKey(c->argv[1]->ptr) || bwAvailable(c->db, false))) {
+        assert(c->argv[2]->type == OBJ_STRING);
+        long long default_val = 0;
+        if (isObjectRepresentableAsLongLong(c->argv[2], &default_val) == C_OK) {
+            // printf("write: SET %s %lld\n", (char *) c->argv[1]->ptr, *ll_val);
+            redisReply *reply = redisCommand(server.backend_db,"SET %s %lld", c->argv[1]->ptr, default_val);
+            freeReplyObject(reply);
+        } else {
+            // printf("write: SET %s\n", (char *) c->argv[1]->ptr, (char *) c->argv[2]->ptr);
+            // printf("write: SET %s\n", (char *) c->argv[1]->ptr);
+            redisReply *reply = redisCommand(server.backend_db,"SET %s %s", c->argv[1]->ptr, c->argv[2]->ptr);
+            freeReplyObject(reply);
+        }
+    }
 }
 
 void setnxCommand(client *c) {
@@ -334,8 +350,66 @@ int getGenericCommand(client *c) {
     return C_OK;
 }
 
+int getRemoteCommand(client *c) {
+    // printf("get: looking up locally\n");
+    robj *o = lookupKeyRead(c->db, c->argv[1]);
+    // printf("get: lookup done key found? %d\n", o != NULL);
+    if (!o && (isRateLimKey(c->argv[1]->ptr) || bwAvailable(c->db, false))) {
+        // printf("get: remote GET %s\n", (char *) c->argv[1]->ptr);
+        redisReply *reply = redisCommand(server.backend_db,"GET %s", c->argv[1]->ptr);
+        // printf("get: reply->type: %d\n", reply->type);
+        if (reply->type == REDIS_REPLY_STRING) {
+            o = createStringObject(reply->str, reply->len);
+
+            size_t used = zmalloc_used_memory() - freeMemoryGetNotCountedMemory();
+            int has_space = (server.maxmemory + 1000000) > used;
+            // printf("used: %zu max: %llu have space = %d\n", used, server.maxmemory, server.maxmemory > used);
+            if (has_space) {
+                robj *key = createStringObject(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
+                int setkey_flags = SETKEY_DOESNT_EXIST;
+                setKey(c,c->db,key,o,setkey_flags);
+                server.dirty++;
+                notifyKeyspaceEvent(NOTIFY_STRING,"set",c->argv[1],c->db->id);
+                uint64_t max_expire = 1844674407370955161;
+                setExpire(c,c->db,c->argv[1],max_expire);
+                notifyKeyspaceEvent(NOTIFY_GENERIC,"expire",c->argv[1],c->db->id);
+            } 
+
+            freeReplyObject(reply);
+            // freeStringObject(key);
+            // freeStringObject(o);
+
+            addReplyBulk(c,o); //This adds crazy overhead for no reason
+            // addReplyOrErrorObject(c, shared.null[c->resp]); //This adds much less overhead
+            return C_OK;
+        } else {
+            // printf("get: error: %s\n", reply->str);
+            o = NULL;
+            addReplyOrErrorObject(c, shared.null[c->resp]);
+            freeReplyObject(reply);
+            return C_OK;
+        }
+    }
+
+    if (!o) {
+        addReplyOrErrorObject(c, shared.null[c->resp]);
+        return C_OK;
+    }
+
+    if (checkType(c,o,OBJ_STRING)) {
+        return C_ERR;
+    }
+
+    addReplyBulk(c,o);
+    return C_OK;
+}
+
 void getCommand(client *c) {
-    getGenericCommand(c);
+    if (USE_REMOTE_BACKEND) {
+        getRemoteCommand(c);
+    } else {
+        getGenericCommand(c);
+    }
 }
 
 /*

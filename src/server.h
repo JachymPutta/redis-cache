@@ -53,6 +53,8 @@
 #include <lua.h>
 #include <signal.h>
 
+#include <hiredis/hiredis.h>
+
 #ifdef HAVE_LIBSYSTEMD
 #include <systemd/sd-daemon.h>
 #endif
@@ -79,6 +81,8 @@ typedef long long ustime_t; /* microsecond time type. */
                            N-elements flat arrays */
 #include "rax.h"     /* Radix tree */
 #include "connection.h" /* Connection abstraction */
+
+#include "init_backend.h" /* Connect to remote backend */
 
 #define REDISMODULE_CORE 1
 typedef struct redisObject robj;
@@ -2070,6 +2074,10 @@ struct redisServer {
     int reply_buffer_resizing_enabled; /* Is reply buffer resizing enabled (1 by default) */
     /* Local environment */
     char *locale_collate;
+
+    redisContext *backend_db;
+    char *rate_limit_key;
+    char *remote_backend_ip;
 };
 
 #define MAX_KEYS_BUFFER 256
@@ -2542,6 +2550,7 @@ void *moduleGetHandleByName(char *modulename);
 int moduleIsModuleCommand(void *module_handle, struct redisCommand *cmd);
 
 /* Utils */
+int bwAvailable(redisDb *db, int isEviction);
 long long ustime(void);
 mstime_t mstime(void);
 mstime_t commandTimeSnapshot(void);
@@ -2673,6 +2682,7 @@ client *lookupClientByID(uint64_t id);
 int authRequired(client *c);
 void putClientInPendingWriteQueue(client *c);
 
+int isRateLimKey(void *key_ptr);
 /* logreqres.c - logging of requests and responses */
 void reqresReset(client *c, int free_buf);
 void reqresSaveClientReplyOffset(client *c);

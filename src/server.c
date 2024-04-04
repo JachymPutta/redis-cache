@@ -4030,8 +4030,11 @@ int processCommand(client *c) {
         if (server.current_client == NULL) return C_ERR;
 
         if (out_of_memory && is_denyoom_command) {
-            rejectCommand(c, shared.oomerr);
-            return C_OK;
+            // printf("out_of_memory: is getting triggered here\n");
+            if (!isRateLimKey(c->argv[1]->ptr)) {
+                rejectCommand(c, shared.oomerr);
+                return C_OK;
+            }
         }
 
         /* Save out_of_memory result at command start, otherwise if we check OOM
@@ -7176,11 +7179,27 @@ int main(int argc, char **argv) {
         serverLog(LL_WARNING,"WARNING: You specified a maxmemory value that is less than 1MB (current value is %llu bytes). Are you sure this is what you really want?", server.maxmemory);
     }
 
+    /* Rate limiting and backend storage setup */
+    serverLog(LL_NOTICE, "rate_limit_key = %s\n", server.rate_limit_key);
+    serverLog(LL_NOTICE, "remote_backend_ip = %s, ASSUMING PORT 6379!!!\n", server.remote_backend_ip);
+
+    /* Connect to the backend database */
+    if (USE_REMOTE_BACKEND) {
+        server.backend_db = connect_to_backend();
+        if (server.backend_db == NULL) {
+            serverLog(LL_WARNING,"Failed to connect to backend DB\n");
+            exit(1);
+        } else {
+            serverLog(LL_NOTICE,"Connected to backend DB\n");
+        }
+    }
+
     redisSetCpuAffinity(server.server_cpulist);
     setOOMScoreAdj(-1);
 
     aeMain(server.el);
     aeDeleteEventLoop(server.el);
+    redisFree(server.backend_db);
     return 0;
 }
 
