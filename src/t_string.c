@@ -308,10 +308,9 @@ void setCommand(client *c) {
     if (USE_REMOTE_BACKEND && (isRateLimKey(c->argv[1]->ptr) || bwAvailable(c->db, false))) {
         assert(c->argv[2]->type == OBJ_STRING);
         long long default_val = 0;
-        long long *ll_val = &default_val;
-        if (isObjectRepresentableAsLongLong(c->argv[2], ll_val) == C_OK) {
+        if (isObjectRepresentableAsLongLong(c->argv[2], &default_val) == C_OK) {
             // printf("write: SET %s %lld\n", (char *) c->argv[1]->ptr, *ll_val);
-            redisReply *reply = redisCommand(server.backend_db,"SET %s %lld", c->argv[1]->ptr, *ll_val);
+            redisReply *reply = redisCommand(server.backend_db,"SET %s %lld", c->argv[1]->ptr, default_val);
             freeReplyObject(reply);
         } else {
             // printf("write: SET %s\n", (char *) c->argv[1]->ptr, (char *) c->argv[2]->ptr);
@@ -359,46 +358,87 @@ int getRemoteCommand(client *c) {
         // printf("get: remote GET %s\n", (char *) c->argv[1]->ptr);
         redisReply *reply = redisCommand(server.backend_db,"GET %s", c->argv[1]->ptr);
         // printf("get: reply->type: %d\n", reply->type);
-        switch (reply->type) {
-        case REDIS_REPLY_STRING:
+        if (reply->type == REDIS_REPLY_STRING) {
             o = createStringObject(reply->str, reply->len);
-            break;
-        case REDIS_REPLY_INTEGER:
-            o = createStringObjectFromLongLong(reply->integer);
-            break;
-        case REDIS_REPLY_DOUBLE:
-            o = createStringObjectFromLongDouble(reply->dval, 0);
-            break;
-        default:
+            // addReply(c, o);
+
+            // robj *key = createStringObject(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
+            // size_t used = zmalloc_used_memory() - freeMemoryGetNotCountedMemory();
+            // int has_space = (server.maxmemory + 1000000) > used;
+            // printf("used: %zu max: %llu have space = %d\n", used, server.maxmemory, server.maxmemory > used);
+            // if (has_space) {
+            int setkey_flags = SETKEY_DOESNT_EXIST;
+            setKey(c,c->db,c->argv[1],o,setkey_flags);
+            server.dirty++;
+            notifyKeyspaceEvent(NOTIFY_STRING,"set",c->argv[1],c->db->id);
+            uint64_t max_expire = 1844674407370955161;
+            setExpire(c,c->db,c->argv[1],max_expire);
+            notifyKeyspaceEvent(NOTIFY_GENERIC,"expire",c->argv[1],c->db->id);
+            // } 
+
+            addReplyBulk(c,o); //This adds crazy overhead for no reason
+            freeReplyObject(reply);
+
+            performEvictions();
+            trackingHandlePendingKeyInvalidations();
+            // freeStringObject(key);
+            freeStringObject(o);
+            return C_OK;
+        } else {
+            printf("get: error: %s\n", reply->str);
+            o = NULL;
             addReplyOrErrorObject(c, shared.null[c->resp]);
+            freeReplyObject(reply);
             return C_OK;
         }
 
-        size_t used = zmalloc_used_memory() - freeMemoryGetNotCountedMemory();
-        int has_space = (server.maxmemory + 1000000) > used;
-        // printf("used: %zu max: %llu have space = %d\n", used, server.maxmemory, server.maxmemory > used);
-        if (o && has_space) {
-        // if (o) {
-            robj *key = createStringObject(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
-            // int found = (lookupKeyWrite(c->db,key) != NULL);
-            // int setkey_flags = 0;
-            // setkey_flags |= found ? SETKEY_ALREADY_EXIST : SETKEY_DOESNT_EXIST;
-            int setkey_flags = SETKEY_DOESNT_EXIST;
+        // switch (reply->type) {
+        // case REDIS_REPLY_STRING:
+        //     break;
+        // case REDIS_REPLY_INTEGER:
+        //     printf("get: integer: %lld\n", reply->integer);
+        //     o = createStringObjectFromLongLong(reply->integer);
+        //     break;
+        // case REDIS_REPLY_DOUBLE:
+        //     printf("get: double: %f\n", reply->dval);
+        //     o = createStringObjectFromLongDouble(reply->dval, 0);
+        //     break;
+        // default:
+        //     o = NULL;
+        //     addReplyOrErrorObject(c, shared.null[c->resp]);
+        //     freeReplyObject(reply);
+        //     return C_OK;
+        // }
+        // freeReplyObject(reply);
+        // addReplyBulk(c,o);
+        // freeStringObject(o);
+        // return C_OK;
 
-            setKey(c,c->db,key,o,setkey_flags);
-            server.dirty++;
-            notifyKeyspaceEvent(NOTIFY_STRING,"set",key,c->db->id);
-            // dbAdd(c->db, key, o);
-            // decrRefCount(key);
+        // size_t used = zmalloc_used_memory() - freeMemoryGetNotCountedMemory();
+        // int has_space = (server.maxmemory + 1000000) > used;
+        // // printf("used: %zu max: %llu have space = %d\n", used, server.maxmemory, server.maxmemory > used);
+        // if (o && has_space) {
+        // // if (o) {
+        //     robj *key = createStringObject(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
+        //     // int found = (lookupKeyWrite(c->db,key) != NULL);
+        //     // int setkey_flags = 0;
+        //     // setkey_flags |= found ? SETKEY_ALREADY_EXIST : SETKEY_DOESNT_EXIST;
+        //     int setkey_flags = SETKEY_DOESNT_EXIST;
 
-            uint64_t max_expire = 1844674407370955161;
-            setExpire(c,c->db,key,max_expire);
-            notifyKeyspaceEvent(NOTIFY_GENERIC,"expire",key,c->db->id);
-        }
-        freeReplyObject(reply);
-        addReplyBulk(c,o);
-        decrRefCount(o);
-        return C_OK;
+        //     setKey(c,c->db,key,o,setkey_flags);
+        //     server.dirty++;
+        //     notifyKeyspaceEvent(NOTIFY_STRING,"set",key,c->db->id);
+        //     // dbAdd(c->db, key, o);
+        //     // decrRefCount(key);
+
+        //     uint64_t max_expire = 1844674407370955161;
+        //     setExpire(c,c->db,key,max_expire);
+        //     notifyKeyspaceEvent(NOTIFY_GENERIC,"expire",key,c->db->id);
+        // }
+        // freeReplyObject(reply);
+        // addReplyBulk(c,o);
+        // decrRefCount(o);
+        // return C_OK;
     }
 
     if (!o) {

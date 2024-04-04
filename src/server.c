@@ -7199,6 +7199,7 @@ int main(int argc, char **argv) {
 
     aeMain(server.el);
     aeDeleteEventLoop(server.el);
+    redisFree(server.backend_db);
     return 0;
 }
 

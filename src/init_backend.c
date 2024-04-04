@@ -25,6 +25,8 @@ int bwAvailable(redisDb *db, int isEviction) {
 
   // currently stalls forever on out of bandwidth
   val = lookupKeyWrite(db, key);
+  freeStringObject(key);
+  // decrRefCount(key);
 
   if (val) {
     int64_t reqs_left = (int64_t) val->ptr;
