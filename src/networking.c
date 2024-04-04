@@ -83,6 +83,8 @@ void *dupClientReplyValue(void *o) {
 }
 
 void freeClientReplyValue(void *o) {
+    int size = zmalloc_size(o);
+    printf("freeClientReplyValue: memory freed %d\n", size);
     zfree(o);
 }
 

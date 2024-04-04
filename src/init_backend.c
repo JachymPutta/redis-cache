@@ -53,5 +53,8 @@ int isRateLimKey(void *key_ptr) {
   // printf("key_str: %s rate_lim_str: %s\n", key_str, rate_lim_str);
   // printf("strcmp: %d\n", strcmp(key_str, rate_lim_str));
 
-  return strcmp(key_str, rate_lim_str) == 0;
+  int is_rate_lim_key = strcmp(key_str, rate_lim_str) == 0;
+  sdsfree(key_str);
+  sdsfree(rate_lim_str);
+  return is_rate_lim_key;
 }
