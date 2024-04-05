@@ -306,15 +306,11 @@ void setCommand(client *c) {
     setGenericCommand(c,flags,c->argv[1],c->argv[2],expire,unit,NULL,NULL);
 
     if (USE_REMOTE_BACKEND && (isRateLimKey(c->argv[1]->ptr) || bwAvailable(c->db, false))) {
-        assert(c->argv[2]->type == OBJ_STRING);
         long long default_val = 0;
         if (isObjectRepresentableAsLongLong(c->argv[2], &default_val) == C_OK) {
-            // printf("write: SET %s %lld\n", (char *) c->argv[1]->ptr, *ll_val);
             redisReply *reply = redisCommand(server.backend_db,"SET %s %lld", c->argv[1]->ptr, default_val);
             freeReplyObject(reply);
         } else {
-            // printf("write: SET %s\n", (char *) c->argv[1]->ptr, (char *) c->argv[2]->ptr);
-            // printf("write: SET %s\n", (char *) c->argv[1]->ptr);
             redisReply *reply = redisCommand(server.backend_db,"SET %s %s", c->argv[1]->ptr, c->argv[2]->ptr);
             freeReplyObject(reply);
         }
@@ -357,49 +353,61 @@ int getRemoteCommand(client *c) {
     // printf("Client last memory usage %zu\n", c->last_memory_usage);
 
     robj *o = lookupKeyRead(c->db, c->argv[1]);
-    // if (o && !isRateLimKey(c->argv[1]->ptr)) {
-        // printf("o %p\n", o);
-        // printf("get: o->type: %d, o->ptr: %s, o->encoding: %d, o->refcount: %d, o->lru %d\n", o->type, o->ptr, o->encoding, o->refcount, o->lru);
-    // }
     // printf("get: lookup done key found? %d\n", o != NULL);
-    if (!o && (isRateLimKey(c->argv[1]->ptr) || bwAvailable(c->db, false))) {
+    if (!o && !isRateLimKey(c->argv[1]->ptr) && bwAvailable(c->db, false)) {
+    // if (!o) {
         // printf("get: remote GET %s\n", (char *) c->argv[1]->ptr);
         redisReply *reply = redisCommand(server.backend_db,"GET %s", c->argv[1]->ptr);
+        // int len = strlen(server.backend_db->reader->buf);
+        // int other_len = strlen(server.backend_db->obuf);
+        // printf("get: len: %d, other_len: %d\n", len, other_len);
         // printf("get: reply->type: %d\n", reply->type);
         if (reply->type == REDIS_REPLY_STRING) {
             o = createStringObject(reply->str, reply->len);
-            // sds o = sdsnewlen(reply->str, reply->len);
-            // printf("get: o->type: %d, o->ptr: %s, o->encoding: %d, o->refcount: %d, o->lru %d\n", o->type, o->ptr, o->encoding, o->refcount, o->lru);
-
-            size_t used = zmalloc_used_memory() - freeMemoryGetNotCountedMemory();
-            int has_space = (server.maxmemory + 1000000) > used;
-            // printf("used: %zu max: %llu have space = %d\n", used, server.maxmemory, server.maxmemory > used);
-            if (has_space) {
-                robj *key = createStringObject(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
-                setKey(c,c->db,key,o,0);
-                server.dirty++;
-                notifyKeyspaceEvent(NOTIFY_STRING,"set",key,c->db->id);
-                uint64_t max_expire = 1844674407370955161;
-                setExpire(c,c->db,key,max_expire);
-                notifyKeyspaceEvent(NOTIFY_GENERIC,"expire",key,c->db->id);
-            } 
-
             freeReplyObject(reply);
+            // tryObjectEncoding(o);
+            // sds o = sdsnewlen(reply->str, reply->len);
+
+            // size_t used = zmalloc_used_memory() - freeMemoryGetNotCountedMemory();
+            // int has_space = (server.maxmemory + 1000000) > used;
+            // printf("used: %zu max: %llu have space = %d\n", used, server.maxmemory, server.maxmemory > used);
+            // if (has_space) {
+            // robj *key = createStringObject(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
+            // printf("REMOTE get: o->key: %s o->type: %d, o->encoding: %d, o->refcount: %d, o->lru %d\n",key->ptr, key->type, key->encoding, key->refcount, key->lru);
+            robj *expire = NULL;
+            int unit = UNIT_SECONDS;
+            int flags = OBJ_NO_FLAGS;
+            setGenericCommand(c,flags,c->argv[1],o,expire,unit,NULL,NULL);
+            // setKey(NULL,c->db,,o,0);
+            // server.dirty++;
+            // notifyKeyspaceEvent(NOTIFY_STRING,"set",key,c->db->id);
+            uint64_t max_expire = 1844674407370955161;
+            setExpire(NULL,c->db,c->argv[1],max_expire);
+            notifyKeyspaceEvent(NOTIFY_GENERIC,"expire",c->argv[1],c->db->id);
+            // } 
+
             // freeStringObject(key);
             // freeStringObject(o);
 
             // printf("stringObjectLen(o): %zu\n", stringObjectLen(o));
             // printf("sdslen(o): %zu\n", sdslen(o->ptr));
-            // addReplyBulk(c,o); //This adds crazy overhead for no reason
-            // o = lookupKeyRead(c->db, c->argv[1]);
-            size_t len = stringObjectLen(o);
-            // addReplyLongLongWithPrefix(c,len,'$');
-            // addReply(c,o);
-            // addReplyProto(c,"\r\n",2);
-            // resetClient(c);
-            // freeStringObject(o);
-            // performEvictions();
-            addReplyOrErrorObject(c, shared.null[c->resp]); //This adds much less overhead
+            // printf("REMOTE get: o->key: %s o->type: %d, o->val: %s, o->encoding: %d, o->refcount: %d, o->lru %d\n",c->argv[1]->ptr, o->type, o->ptr, o->encoding, o->refcount, o->lru);
+            // while (o->refcount > 1) {
+            decrRefCount(o);
+            // } 
+            if (checkType(c,o,OBJ_STRING)) {
+                return C_ERR;
+            }
+            // printf("REMOTE get: o->key: %s o->type: %d, o->encoding: %d, o->refcount: %d, o->lru %d\n",c->argv[1]->ptr, o->type, o->encoding, o->refcount, o->lru);
+            sds client = catClientInfoString(sdsempty(),c);
+            printf("REMOTE get: %s\n", client);
+            sds_free(client);
+            addReplyBulk(c,o); //This adds crazy overhead for no reason
+            // if (has_space) {
+            // } else {
+            //     freeStringObject(o);
+            // }
+            // addReplyOrErrorObject(c, shared.null[c->resp]); //This adds much less overhead
             return C_OK;
         } else {
             // printf("get: error: %s\n", reply->str);
@@ -419,6 +427,15 @@ int getRemoteCommand(client *c) {
         return C_ERR;
     }
 
+    // if (o && !isRateLimKey(c->argv[1]->ptr)) {
+    //     // printf("LOCAL get: o->type: %d, o->ptr: %s, o->encoding: %d, o->refcount: %d, o->lru %d\n", o->type, o->ptr, o->encoding, o->refcount, o->lru);
+    //     printf("LOCAL get: o->key: %s o->type: %d, o->encoding: %d, o->refcount: %d, o->lru %d\n",c->argv[1]->ptr, o->type, o->encoding, o->refcount, o->lru);
+    //     // printf("LOCAL get: o->key: %s o->type: %d, o->encoding: %d, o->refcount: %d, o->lru %d\n",c->argv[1]->ptr, c->argv[1]->type, c->argv[1]->encoding, c->argv[1]->refcount, c->argv[1]->lru);
+    // }
+
+    // sds client = catClientInfoString(sdsempty(),c);
+    // printf("LOCAL get: %s\n", client);
+    // sds_free(client);
     addReplyBulk(c,o);
     return C_OK;
 }
