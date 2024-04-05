@@ -364,7 +364,6 @@ int getRemoteCommand(client *c) {
         // printf("get: reply->type: %d\n", reply->type);
         if (reply->type == REDIS_REPLY_STRING) {
             o = createStringObject(reply->str, reply->len);
-            freeReplyObject(reply);
             // tryObjectEncoding(o);
             // sds o = sdsnewlen(reply->str, reply->len);
 
@@ -374,10 +373,7 @@ int getRemoteCommand(client *c) {
             // if (has_space) {
             // robj *key = createStringObject(c->argv[1]->ptr, sdslen(c->argv[1]->ptr));
             // printf("REMOTE get: o->key: %s o->type: %d, o->encoding: %d, o->refcount: %d, o->lru %d\n",key->ptr, key->type, key->encoding, key->refcount, key->lru);
-            robj *expire = NULL;
-            int unit = UNIT_SECONDS;
-            int flags = OBJ_NO_FLAGS;
-            setGenericCommand(c,flags,c->argv[1],o,expire,unit,NULL,NULL);
+            setGenericCommand(c,OBJ_NO_FLAGS,c->argv[1],o,NULL,UNIT_SECONDS,NULL,NULL);
             // setKey(NULL,c->db,,o,0);
             // server.dirty++;
             // notifyKeyspaceEvent(NOTIFY_STRING,"set",key,c->db->id);
@@ -395,14 +391,12 @@ int getRemoteCommand(client *c) {
             // while (o->refcount > 1) {
             decrRefCount(o);
             // } 
-            if (checkType(c,o,OBJ_STRING)) {
-                return C_ERR;
-            }
-            // printf("REMOTE get: o->key: %s o->type: %d, o->encoding: %d, o->refcount: %d, o->lru %d\n",c->argv[1]->ptr, o->type, o->encoding, o->refcount, o->lru);
-            sds client = catClientInfoString(sdsempty(),c);
-            printf("REMOTE get: %s\n", client);
-            sds_free(client);
+            // ntf("REMOTE get: o->key: %s o->type: %d, o->encoding: %d, o->refcount: %d, o->lru %d\n",c->argv[1]->ptr, o->type, o->encoding, o->refcount, o->lru);
+            // sds client = catClientInfoString(sdsempty(),c);
+            // printf("REMOTE get: %s\n", client);
+            // sds_free(client);
             addReplyBulk(c,o); //This adds crazy overhead for no reason
+            freeReplyObject(reply);
             // if (has_space) {
             // } else {
             //     freeStringObject(o);
