@@ -364,6 +364,7 @@ int getRemoteCommand(client *c) {
         // printf("get: reply->type: %d\n", reply->type);
         if (reply->type == REDIS_REPLY_STRING) {
             o = createStringObject(reply->str, reply->len);
+            addReplyBulk(c,o); //This adds crazy overhead for no reason
             // tryObjectEncoding(o);
             // sds o = sdsnewlen(reply->str, reply->len);
 
@@ -389,13 +390,12 @@ int getRemoteCommand(client *c) {
             // printf("sdslen(o): %zu\n", sdslen(o->ptr));
             // printf("REMOTE get: o->key: %s o->type: %d, o->val: %s, o->encoding: %d, o->refcount: %d, o->lru %d\n",c->argv[1]->ptr, o->type, o->ptr, o->encoding, o->refcount, o->lru);
             // while (o->refcount > 1) {
-            decrRefCount(o);
             // } 
             // ntf("REMOTE get: o->key: %s o->type: %d, o->encoding: %d, o->refcount: %d, o->lru %d\n",c->argv[1]->ptr, o->type, o->encoding, o->refcount, o->lru);
             // sds client = catClientInfoString(sdsempty(),c);
             // printf("REMOTE get: %s\n", client);
             // sds_free(client);
-            addReplyBulk(c,o); //This adds crazy overhead for no reason
+            decrRefCount(o);
             freeReplyObject(reply);
             // if (has_space) {
             // } else {
